@@ -1,0 +1,1766 @@
+openapi: 3.0.3
+info:
+  title: News Application API
+  description: API specification for a News Management Application with user authentication, news management, categories, comments, bookmarks, and more.
+  version: 3.2.3
+  contact:
+    name: News API Support
+    email: support@newsapp.com
+servers:
+  - url: https://api.newsapp.com/api
+    description: Production server
+  - url: https://staging-api.newsapp.com/api
+    description: Staging server
+  - url: http://localhost/api
+    description: Development server
+
+paths:
+  # Settings and Configuration Endpoints
+  /get_settings:
+    post:
+      tags:
+        - Settings
+      summary: Get application settings
+      description: Retrieve all application settings including timezone, modes, ads configuration, and default language
+      responses:
+        '200':
+          description: Settings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Language Management
+  /get_languages_list:
+    post:
+      tags:
+        - Language
+      summary: Get languages list
+      description: Retrieve list of available languages
+      responses:
+        '200':
+          description: Languages retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LanguagesResponse'
+
+  /get_language_json_data:
+    post:
+      tags:
+        - Language
+      summary: Get language JSON data
+      description: Retrieve language translations data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+      responses:
+        '200':
+          description: Language data retrieved successfully
+
+  # Content Management
+  /get_pages:
+    post:
+      tags:
+        - Content
+      summary: Get pages
+      description: Retrieve application pages content
+      responses:
+        '200':
+          description: Pages retrieved successfully
+
+  /get_policy_pages:
+    post:
+      tags:
+        - Content
+      summary: Get policy pages
+      description: Retrieve policy pages (privacy policy, terms of service, etc.)
+      responses:
+        '200':
+          description: Policy pages retrieved successfully
+
+  # Location Management
+  /get_location:
+    post:
+      tags:
+        - Location
+      summary: Get locations
+      description: Retrieve available locations
+      responses:
+        '200':
+          description: Locations retrieved successfully
+
+  # Category Management
+  /get_category:
+    post:
+      tags:
+        - Category
+      summary: Get categories
+      description: Retrieve news categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID to filter categories
+      responses:
+        '200':
+          description: Categories retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoriesResponse'
+
+  /get_subcategory_by_category:
+    post:
+      tags:
+        - Category
+      summary: Get subcategories by category
+      description: Retrieve subcategories for a specific category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - category_id
+              properties:
+                category_id:
+                  type: integer
+                  description: Category ID
+      responses:
+        '200':
+          description: Subcategories retrieved successfully
+
+  # Tag Management
+  /get_tag:
+    post:
+      tags:
+        - Tag
+      summary: Get tags
+      description: Retrieve available tags
+      responses:
+        '200':
+          description: Tags retrieved successfully
+
+  # News Management
+  /get_news:
+    post:
+      tags:
+        - News
+      summary: Get news
+      description: Retrieve news articles with filtering and pagination options
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID (required if get_user_news=0)
+                get_user_news:
+                  type: integer
+                  description: Flag to get user-specific news (0 or 1)
+                  default: 0
+                category_id:
+                  type: integer
+                  description: Filter by category ID
+                category_slug:
+                  type: string
+                  description: Filter by category slug
+                subcategory_id:
+                  type: integer
+                  description: Filter by subcategory ID
+                subcategory_slug:
+                  type: string
+                  description: Filter by subcategory slug
+                tag_id:
+                  type: string
+                  description: Filter by tag IDs (comma-separated)
+                tag_slug:
+                  type: string
+                  description: Filter by tag slug
+                search:
+                  type: string
+                  description: Search term
+                offset:
+                  type: integer
+                  description: Pagination offset
+                  default: 0
+                limit:
+                  type: integer
+                  description: Number of items per page
+                  default: 10
+      responses:
+        '200':
+          description: News retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsResponse'
+
+  /get_videos:
+    post:
+      tags:
+        - News
+      summary: Get video news
+      description: Retrieve video news content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language_id:
+                  type: integer
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Videos retrieved successfully
+
+  /set_news_view:
+    post:
+      tags:
+        - News
+      summary: Set news view
+      description: Record a view for a news article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+      responses:
+        '200':
+          description: News view recorded successfully
+
+  # News Management (Authenticated)
+  /set_news:
+    post:
+      tags:
+        - News Management
+      summary: Create or update news
+      description: Create new news article or update existing one
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - action_type
+                - title
+                - slug
+                - published_date
+              properties:
+                action_type:
+                  type: string
+                  description: "1 for create, 2 for update"
+                  enum: ["1", "2"]
+                news_id:
+                  type: integer
+                  description: Required for update (action_type=2)
+                title:
+                  type: string
+                  description: News title
+                slug:
+                  type: string
+                  description: URL slug
+                published_date:
+                  type: string
+                  format: date
+                  description: Publication date
+                category_id:
+                  type: integer
+                  description: Category ID
+                subcategory_id:
+                  type: integer
+                  description: Subcategory ID
+                tag_id:
+                  type: string
+                  description: Tag IDs (comma-separated)
+                description:
+                  type: string
+                  description: News content
+                meta_title:
+                  type: string
+                  description: SEO meta title
+                meta_description:
+                  type: string
+                  description: SEO meta description
+                meta_keyword:
+                  type: string
+                  description: SEO meta keywords
+                show_till:
+                  type: string
+                  format: date
+                  description: Expiration date
+                language_id:
+                  type: integer
+                  description: Language ID
+                location_id:
+                  type: integer
+                  description: Location ID
+                content_type:
+                  type: string
+                  enum: ["standard_post", "video_youtube", "video_other", "video_upload"]
+                  description: Type of content
+                content_data:
+                  type: string
+                  description: Content data (URL for videos or file for upload)
+                image:
+                  type: string
+                  format: binary
+                  description: Main news image
+                ofile:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Additional images
+      responses:
+        '200':
+          description: News created/updated successfully
+        '401':
+          description: Unauthorized
+        '422':
+          description: Validation error
+
+  /delete_news:
+    post:
+      tags:
+        - News Management
+      summary: Delete news
+      description: Delete a news article
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                  description: News ID to delete
+      responses:
+        '200':
+          description: News deleted successfully
+        '401':
+          description: Unauthorized
+
+  /delete_news_images:
+    post:
+      tags:
+        - News Management
+      summary: Delete news images
+      description: Delete additional images from a news article
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                  description: Comma-separated image IDs to delete
+      responses:
+        '200':
+          description: Images deleted successfully
+
+  /check_slug_availability:
+    post:
+      tags:
+        - News Management
+      summary: Check slug availability
+      description: Check if a slug is available for use
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - slug
+              properties:
+                slug:
+                  type: string
+                  description: Slug to check
+                news_id:
+                  type: integer
+                  description: News ID to exclude from check (for updates)
+      responses:
+        '200':
+          description: Slug availability checked
+
+  /update_news_status:
+    post:
+      tags:
+        - News Management
+      summary: Update news status and send notifications
+      description: Activate or deactivate a news article by changing its status. When activating (status=1), optionally send push notifications to users.
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+                - status
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+                  example: 123
+                status:
+                  type: integer
+                  description: "News status: 1 = Active/Published, 0 = Inactive/Draft"
+                  enum: [0, 1]
+                  example: 1
+                notify_users:
+                  type: integer
+                  description: "Send push notification to users when activating (status=1): 1 = Yes, 0 = No"
+                  enum: [0, 1]
+                  default: 0
+                  example: 1
+            examples:
+              activate_with_notification:
+                summary: Activate news and send notifications
+                value:
+                  news_id: 123
+                  status: 1
+                  notify_users: 1
+              activate_without_notification:
+                summary: Activate news without notifications
+                value:
+                  news_id: 123
+                  status: 1
+                  notify_users: 0
+              deactivate_news:
+                summary: Deactivate news article
+                value:
+                  news_id: 123
+                  status: 0
+      responses:
+        '200':
+          description: News status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "News status updated successfully"
+                  data:
+                    type: object
+                    properties:
+                      news_id:
+                        type: integer
+                        example: 123
+                      status:
+                        type: integer
+                        example: 1
+                      notifications_sent:
+                        type: integer
+                        description: Number of notifications sent (only when notify_users=1)
+                        example: 150
+                      updated_at:
+                        type: string
+                        format: date-time
+                        example: "2024-08-06 15:30:00"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: News not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "News article not found"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Validation failed"
+                  errors:
+                    type: object
+                    properties:
+                      news_id:
+                        type: array
+                        items:
+                          type: string
+                        example: ["The news_id field is required."]
+                      status:
+                        type: array
+                        items:
+                          type: string
+                        example: ["The status field must be 0 or 1."]
+
+  # Breaking News
+  /get_breaking_news:
+    post:
+      tags:
+        - Breaking News
+      summary: Get breaking news
+      description: Retrieve breaking news articles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                slug:
+                  type: string
+                  description: Filter by slug
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Breaking news retrieved successfully
+
+  /set_breaking_news_view:
+    post:
+      tags:
+        - Breaking News
+      summary: Set breaking news view
+      description: Record a view for breaking news
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - breaking_news_id
+              properties:
+                breaking_news_id:
+                  type: integer
+                  description: Breaking news ID
+      responses:
+        '200':
+          description: Breaking news view recorded successfully
+
+  # Comments
+  /get_comment_by_news:
+    post:
+      tags:
+        - Comments
+      summary: Get comments by news
+      description: Retrieve comments for a specific news article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Comments retrieved successfully
+
+  /set_comment:
+    post:
+      tags:
+        - Comments
+      summary: Add comment
+      description: Add a comment to a news article
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+                - message
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+                message:
+                  type: string
+                  description: Comment text
+                parent_id:
+                  type: integer
+                  description: Parent comment ID for replies
+      responses:
+        '200':
+          description: Comment added successfully
+
+  /delete_comment:
+    post:
+      tags:
+        - Comments
+      summary: Delete comment
+      description: Delete a comment
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - comment_id
+              properties:
+                comment_id:
+                  type: integer
+                  description: Comment ID to delete
+      responses:
+        '200':
+          description: Comment deleted successfully
+
+  /set_comment_like_dislike:
+    post:
+      tags:
+        - Comments
+      summary: Like/dislike comment
+      description: Set like or dislike for a comment
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+                - comment_id
+                - status
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                comment_id:
+                  type: integer
+                  description: Comment ID
+                status:
+                  type: integer
+                  description: "0=remove, 1=like, 2=dislike"
+                  enum: [0, 1, 2]
+      responses:
+        '200':
+          description: Comment like/dislike updated successfully
+
+  /set_flag:
+    post:
+      tags:
+        - Comments
+      summary: Flag comment
+      description: Report a comment as inappropriate
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - comment_id
+                - news_id
+                - message
+              properties:
+                comment_id:
+                  type: integer
+                  description: Comment ID to flag
+                news_id:
+                  type: integer
+                  description: News article ID
+                message:
+                  type: string
+                  description: Reason for flagging
+      responses:
+        '200':
+          description: Comment flagged successfully
+
+  # User Interactions
+  /set_like_dislike:
+    post:
+      tags:
+        - User Interactions
+      summary: Like/dislike news
+      description: Set like or dislike for a news article
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+                - status
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+                status:
+                  type: integer
+                  description: "0=remove, 1=like, 2=dislike"
+                  enum: [0, 1, 2]
+      responses:
+        '200':
+          description: Like/dislike updated successfully
+
+  /get_like:
+    post:
+      tags:
+        - User Interactions
+      summary: Get liked news
+      description: Retrieve news articles liked by the user
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Liked news retrieved successfully
+
+  # Bookmarks
+  /set_bookmark:
+    post:
+      tags:
+        - Bookmarks
+      summary: Add/remove bookmark
+      description: Bookmark or unbookmark a news article
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - news_id
+                - status
+              properties:
+                news_id:
+                  type: integer
+                  description: News article ID
+                status:
+                  type: integer
+                  description: "0=remove, 1=add bookmark"
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Bookmark updated successfully
+
+  /get_bookmark:
+    post:
+      tags:
+        - Bookmarks
+      summary: Get bookmarked news
+      description: Retrieve bookmarked news articles for the user
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Bookmarked news retrieved successfully
+
+  # User Management
+  /user_signup:
+    post:
+      tags:
+        - User Management
+      summary: User signup/login
+      description: Register new user or login existing user using Firebase authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - firebase_id
+              properties:
+                firebase_id:
+                  type: string
+                  description: Firebase user ID
+                type:
+                  type: string
+                  description: User type
+                name:
+                  type: string
+                  description: User name
+                email:
+                  type: string
+                  format: email
+                  description: User email
+                mobile:
+                  type: string
+                  description: User mobile number
+                profile:
+                  type: string
+                  description: Profile picture URL
+                fcm_id:
+                  type: string
+                  description: FCM token for push notifications
+                status:
+                  type: integer
+                  description: User status
+                  default: 1
+      responses:
+        '200':
+          description: User registered/logged in successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+                  message:
+                    type: string
+
+  /get_user_by_id:
+    post:
+      tags:
+        - User Management
+      summary: Get user by ID
+      description: Retrieve current authenticated user information
+      security:
+        - sanctumAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+
+  /update_profile:
+    post:
+      tags:
+        - User Management
+      summary: Update user profile
+      description: Update authenticated user's profile information
+      security:
+        - sanctumAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: User name
+                email:
+                  type: string
+                  format: email
+                  description: User email
+                mobile:
+                  type: string
+                  description: User mobile number
+                profile:
+                  type: string
+                  format: binary
+                  description: Profile picture file
+      responses:
+        '200':
+          description: Profile updated successfully
+
+  /delete_user:
+    post:
+      tags:
+        - User Management
+      summary: Delete user account
+      description: Delete the authenticated user's account and all associated data
+      security:
+        - sanctumAuth: []
+      responses:
+        '200':
+          description: User account deleted successfully
+
+  /register_token:
+    post:
+      tags:
+        - User Management
+      summary: Register FCM token
+      description: Register or update FCM token for push notifications
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+                - token
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                token:
+                  type: string
+                  description: FCM token
+                latitude:
+                  type: number
+                  format: float
+                  description: User latitude
+                  default: 0
+                longitude:
+                  type: number
+                  format: float
+                  description: User longitude
+                  default: 0
+      responses:
+        '200':
+          description: Token registered successfully
+
+  # Surveys
+  /get_question:
+    post:
+      tags:
+        - Survey
+      summary: Get survey questions
+      description: Retrieve unanswered survey questions for the user
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Survey questions retrieved successfully
+
+  /set_question_result:
+    post:
+      tags:
+        - Survey
+      summary: Submit survey answer
+      description: Submit an answer to a survey question
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - question_id
+                - option_id
+              properties:
+                question_id:
+                  type: integer
+                  description: Question ID
+                option_id:
+                  type: integer
+                  description: Selected option ID
+      responses:
+        '200':
+          description: Survey answer submitted successfully
+
+  /get_question_result:
+    post:
+      tags:
+        - Survey
+      summary: Get survey results
+      description: Retrieve survey questions with their results and statistics
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                question_id:
+                  type: integer
+                  description: Specific question ID (optional)
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Survey results retrieved successfully
+
+  # User Preferences
+  /set_user_category:
+    post:
+      tags:
+        - User Preferences
+      summary: Set user category preferences
+      description: Set user's preferred news categories
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - category_id
+              properties:
+                category_id:
+                  type: string
+                  description: "Category IDs (comma-separated) or '0' to clear all"
+      responses:
+        '200':
+          description: User categories updated successfully
+
+  # Notifications
+  /get_notification:
+    post:
+      tags:
+        - Notifications
+      summary: Get notifications
+      description: Retrieve application notifications
+      responses:
+        '200':
+          description: Notifications retrieved successfully
+
+  /get_user_notification:
+    post:
+      tags:
+        - Notifications
+      summary: Get user notifications
+      description: Retrieve user-specific notifications
+      security:
+        - sanctumAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: User notifications retrieved successfully
+
+  /delete_user_notification:
+    post:
+      tags:
+        - Notifications
+      summary: Delete user notifications
+      description: Delete user notifications by IDs
+      security:
+        - sanctumAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                  description: Comma-separated notification IDs to delete
+      responses:
+        '200':
+          description: Notifications deleted successfully
+
+  # Featured Content
+  /get_featured_sections:
+    post:
+      tags:
+        - Featured Content
+      summary: Get featured sections
+      description: Retrieve featured news sections
+      responses:
+        '200':
+          description: Featured sections retrieved successfully
+
+  # Live Streaming
+  /get_live_streaming:
+    post:
+      tags:
+        - Live Streaming
+      summary: Get live streaming
+      description: Retrieve live streaming content
+      responses:
+        '200':
+          description: Live streaming content retrieved successfully
+
+  # RSS Feeds
+  /get_rss_feed:
+    post:
+      tags:
+        - RSS
+      summary: Get RSS feeds
+      description: Retrieve RSS feed listings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+                category_id:
+                  type: integer
+                  description: Filter by category ID
+                category_slug:
+                  type: string
+                  description: Filter by category slug
+                subcategory_id:
+                  type: integer
+                  description: Filter by subcategory ID
+                subcategory_slug:
+                  type: string
+                  description: Filter by subcategory slug
+                tag_id:
+                  type: string
+                  description: Filter by tag IDs
+                tag_slug:
+                  type: string
+                  description: Filter by tag slug
+                search:
+                  type: string
+                  description: Search term
+                offset:
+                  type: integer
+                  default: 0
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: RSS feeds retrieved successfully
+
+  /get_rss_feed_by_id:
+    post:
+      tags:
+        - RSS
+      summary: Get RSS feed by ID
+      description: Retrieve and parse RSS feed content by ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                  description: RSS feed ID
+      responses:
+        '200':
+          description: RSS feed content retrieved successfully
+
+  # SEO and Web Content
+  /get_web_seo_pages:
+    post:
+      tags:
+        - SEO
+      summary: Get web SEO pages
+      description: Retrieve SEO-optimized web pages content
+      responses:
+        '200':
+          description: SEO pages retrieved successfully
+
+  # Advertisement
+  /get_ad_space_news_details:
+    post:
+      tags:
+        - Advertisement
+      summary: Get ad space for news details
+      description: Retrieve advertisement spaces for news details page
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - language_id
+              properties:
+                language_id:
+                  type: integer
+                  description: Language ID
+      responses:
+        '200':
+          description: Ad spaces retrieved successfully
+
+components:
+  securitySchemes:
+    sanctumAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Error message description"
+
+    SuccessResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+    PaginatedResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        total:
+          type: integer
+          description: Total number of items
+        data:
+          type: array
+          items:
+            type: object
+
+    SettingsResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            system_timezone:
+              type: string
+              example: "UTC"
+            category_mode:
+              type: string
+              example: "1"
+            subcategory_mode:
+              type: string
+              example: "1"
+            breaking_news_mode:
+              type: string
+              example: "1"
+            live_streaming_mode:
+              type: string
+              example: "1"
+            rss_feed_mode:
+              type: string
+              example: "1"
+            comments_mode:
+              type: string
+              example: "1"
+            weather_mode:
+              type: string
+              example: "1"
+            location_news_mode:
+              type: string
+              example: "1"
+            nearest_location_measure:
+              type: string
+              example: "1000"
+            video_type_preference:
+              type: string
+              example: "youtube"
+            maintenance_mode:
+              type: string
+              example: "0"
+            mobile_login_mode:
+              type: string
+              example: "1"
+            country_code:
+              type: string
+              example: "US"
+            auto_delete_expire_news_mode:
+              type: string
+              example: "0"
+            app_version:
+              type: string
+              example: "3.2.3"
+            default_language:
+              $ref: '#/components/schemas/Language'
+            web_setting:
+              type: object
+            social_media:
+              type: array
+              items:
+                $ref: '#/components/schemas/SocialMedia'
+
+    Language:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        language:
+          type: string
+          example: "English"
+        code:
+          type: string
+          example: "en"
+        status:
+          type: integer
+          example: 1
+        isRTL:
+          type: integer
+          example: 0
+        image:
+          type: string
+          example: "https://example.com/flag.png"
+        display_name:
+          type: string
+          example: "English"
+
+    LanguagesResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Language'
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        category_name:
+          type: string
+          example: "Technology"
+        slug:
+          type: string
+          example: "technology"
+        image:
+          type: string
+          example: "https://example.com/category.jpg"
+        status:
+          type: integer
+          example: 1
+
+    CategoriesResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    News:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Breaking News Title"
+        slug:
+          type: string
+          example: "breaking-news-title"
+        description:
+          type: string
+          example: "News article content..."
+        image:
+          type: string
+          example: "https://example.com/news-image.jpg"
+        date:
+          type: string
+          format: date-time
+          example: "2024-08-06 12:00:00"
+        published_date:
+          type: string
+          format: date
+          example: "2024-08-06"
+        show_till:
+          type: string
+          format: date
+          example: "2024-12-31"
+        category_id:
+          type: integer
+          example: 1
+        category_name:
+          type: string
+          example: "Technology"
+        subcategory_id:
+          type: integer
+          example: 1
+        language_id:
+          type: integer
+          example: 1
+        location_id:
+          type: integer
+          example: 1
+        content_type:
+          type: string
+          enum: ["standard_post", "video_youtube", "video_other", "video_upload"]
+          example: "standard_post"
+        content_value:
+          type: string
+          example: ""
+        meta_title:
+          type: string
+          example: "SEO Meta Title"
+        meta_description:
+          type: string
+          example: "SEO Meta Description"
+        meta_keyword:
+          type: string
+          example: "seo, keywords"
+        tag_id:
+          type: string
+          example: "1,2,3"
+        tag_name:
+          type: string
+          example: "tag1,tag2,tag3"
+        tag:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        total_like:
+          type: integer
+          example: 15
+        like:
+          type: integer
+          example: 1
+        total_bookmark:
+          type: integer
+          example: 5
+        bookmark:
+          type: integer
+          example: 0
+        total_views:
+          type: integer
+          example: 100
+        is_expired:
+          type: integer
+          example: 0
+        image_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsImage'
+
+    NewsImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        news_id:
+          type: integer
+          example: 1
+        other_image:
+          type: string
+          example: "https://example.com/other-image.jpg"
+
+    NewsResponse:
+      type: object
+      properties:
+        error:
+          type: boolean
+          example: false
+        total:
+          type: integer
+          example: 50
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/News'
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        tag_name:
+          type: string
+          example: "Technology"
+        slug:
+          type: string
+          example: "technology"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        firebase_id:
+          type: string
+          example: "firebase_user_id"
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        mobile:
+          type: string
+          example: "+1234567890"
+        profile:
+          type: string
+          example: "https://example.com/profile.jpg"
+        type:
+          type: string
+          example: "google"
+        fcm_id:
+          type: string
+          example: "fcm_token"
+        status:
+          type: integer
+          example: 1
+        role:
+          type: integer
+          example: 0
+        date:
+          type: string
+          format: date-time
+          example: "2024-08-06 12:00:00"
+        token:
+          type: string
+          example: "sanctum_auth_token"
+        is_login:
+          type: string
+          example: "1"
+        user_category:
+          type: object
+          properties:
+            category_id:
+              type: string
+              example: "1,2,3"
+
+    SocialMedia:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        image:
+          type: string
+          example: "https://example.com/social-icon.png"
+        link:
+          type: string
+          example: "https://facebook.com/newsapp"
+
+tags:
+  - name: Settings
+    description: Application settings and configuration
+  - name: Language
+    description: Language management and localization
+  - name: Content
+    description: Static content and pages
+  - name: Location
+    description: Location management
+  - name: Category
+    description: News categories and subcategories
+  - name: Tag
+    description: News tags management
+  - name: News
+    description: News articles retrieval and viewing
+  - name: News Management
+    description: News article creation, updating, and deletion (requires authentication)
+  - name: Breaking News
+    description: Breaking news management
+  - name: Comments
+    description: Comments and interactions on news articles
+  - name: User Interactions
+    description: User likes, dislikes, and other interactions
+  - name: Bookmarks
+    description: User bookmarks management
+  - name: User Management
+    description: User registration, authentication, and profile management
+  - name: Survey
+    description: Survey questions and results
+  - name: User Preferences
+    description: User preferences and settings
+  - name: Notifications
+    description: Push notifications and user notifications
+  - name: Featured Content
+    description: Featured news sections and highlights
+  - name: Live Streaming
+    description: Live streaming content
+  - name: RSS
+    description: RSS feeds management
+  - name: SEO
+    description: SEO and web content optimization
+  - name: Advertisement
+    description: Advertisement spaces and management
