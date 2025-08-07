@@ -48,6 +48,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('delete_news_images', [ApiController::class, 'deleteNewsImages']);
     Route::post('delete_news', [ApiController::class, 'deleteNews']);
     Route::post('set_news', [ApiController::class, 'setNews']);
+    Route::post('update_news_status', [ApiController::class, 'updateNewsStatus']);
     Route::post('get_question_result', [ApiController::class, 'getQuestionResult']);
     Route::post('set_question_result', [ApiController::class, 'setQuestionResult']);
     Route::post('get_question', [ApiController::class, 'getQuestion']);

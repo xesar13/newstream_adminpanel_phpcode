@@ -1,3 +1,4 @@
+
 <?php
 
 namespace App\Http\Controllers;
@@ -60,6 +61,77 @@ class ApiController extends Controller
         // $this->lang = 'en';
     }
 
+       /**
+     * Actualiza el status de una noticia y opcionalmente notifica a los usuarios.
+     * Endpoint: /update_news_status
+     */
+    public function updateNewsStatus(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'news_id' => ['required', 'numeric'],
+                'status' => ['required', 'in:0,1'],
+                'notify_users' => ['nullable', 'in:0,1'],
+            ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => $validator->errors()->first(),
+                ], 422);
+            }
+
+            $news = News::find($request->news_id);
+            if (!$news) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'News article not found',
+                ], 404);
+            }
+
+            $news->status = $request->status;
+            $news->save();
+
+            $notifications_sent = 0;
+            // Solo notificar si se activa la noticia y notify_users=1
+            if ($request->status == 1 && $request->notify_users == 1) {
+                // Construir mensaje push
+                $title = $news->title;
+                $body = strip_tags($news->description ?? 'Nueva noticia publicada');
+                $news_id = $news->id;
+                $fcmMsg = [
+                    'title' => $title,
+                    'body' => $body,
+                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                    'news_id' => $news_id,
+                ];
+                // Obtener todos los tokens de usuarios activos
+                $tokens = \App\Models\Token::where('status', 1)->pluck('token')->toArray();
+                if (!empty($tokens)) {
+                    // Llama a la función global send_notification (ya usada en el proyecto)
+                    send_notification($fcmMsg, $news->language_id, 0, $tokens);
+                    $notifications_sent = count($tokens);
+                }
+            }
+
+            $response = [
+                'error' => false,
+                'message' => 'News status updated successfully',
+                'data' => [
+                    'news_id' => $news->id,
+                    'status' => $news->status,
+                    'notifications_sent' => $notifications_sent,
+                    'updated_at' => $news->updated_at,
+                ],
+            ];
+            return response()->json($response);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    
     public function getRssFeedById(Request $request)
     {
         try {
@@ -2898,12 +2970,12 @@ class ApiController extends Controller
     }
 
     public function getNotification(Request $request)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'language_id' => ['required', 'numeric'],
-            ]);
-            if ($validator->fails()) {
+                    'error' => false,
+                    'data' => $res,
+                ];
+            } else {
+                $response = [
+                    'error' => true,
                 return response()->json([
                     'error' => true,
                     'message' => $validator->errors()->first(),
