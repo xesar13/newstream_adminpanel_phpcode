@@ -1,4 +1,3 @@
-
 <?php
 
 namespace App\Http\Controllers;
@@ -61,7 +60,7 @@ class ApiController extends Controller
         // $this->lang = 'en';
     }
 
-       /**
+     /**
      * Actualiza el status de una noticia y opcionalmente notifica a los usuarios.
      * Endpoint: /update_news_status
      */
@@ -556,7 +555,7 @@ class ApiController extends Controller
         $news->meta_keyword = $request->meta_keyword ?? '';
         $news->meta_description = $request->meta_description ?? '';
         $news->admin_id = 0;
-        $news->status = 0;
+       // $news->status = 0;
         $news->save();
 
         $id = $news->id;
@@ -2970,12 +2969,12 @@ class ApiController extends Controller
     }
 
     public function getNotification(Request $request)
-                    'error' => false,
-                    'data' => $res,
-                ];
-            } else {
-                $response = [
-                    'error' => true,
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'language_id' => ['required', 'numeric'],
+            ]);
+            if ($validator->fails()) {
                 return response()->json([
                     'error' => true,
                     'message' => $validator->errors()->first(),
