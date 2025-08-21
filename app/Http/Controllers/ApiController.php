@@ -582,7 +582,8 @@ class ApiController extends Controller
                 'news_id' => ['required_if:action_type,2'],
                 'title' => ['required'],
                 'slug' => ['required'],
-                'published_date' => ['required']
+                'published_date' => ['required'],
+                'integration_ids' => ['nullable', 'array'], // IDs de integraciones a publicar
             ]);
             if ($validator->fails()) {
                 return response()->json([
@@ -602,6 +603,48 @@ class ApiController extends Controller
                     'message' => 'You do not have permission to manage news.',
                 ];
             }
+
+            // Si la noticia fue creada/actualizada correctamente y hay integraciones
+            $publishResults = [];
+            if (isset($response['error']) && !$response['error'] && is_array($request->integration_ids) && count($request->integration_ids) > 0) {
+                // Obtener la noticia recién creada/actualizada
+                $news = null;
+                if ($request->action_type == '2') {
+                    $news = \App\Models\News::find($request->news_id);
+                } else {
+                    $news = \App\Models\News::where('slug', $request->slug)->latest('id')->first();
+                }
+                if ($news) {
+                    foreach ($request->integration_ids as $integrationId) {
+                        // Preparar datos para publishToSocial
+                        $publishRequest = new \Illuminate\Http\Request();
+                        $publishRequest->replace([
+                            'message' => $news->title . (isset($news->description) ? ("\n" . strip_tags($news->description)) : ''),
+                            'integration_id' => $integrationId,
+                            'type' => 'now',
+                            'date' => $news->published_date ?? null,
+                            // 'file' => null, // Si quieres enviar imagen, deberías obtener la ruta y cargar el archivo
+                        ]);
+                        // Si la noticia tiene imagen, intentar adjuntarla
+                        if ($news->image) {
+                            $imagePath = public_path($news->image);
+                            if (file_exists($imagePath)) {
+                                $publishRequest->files->set('file', new \Illuminate\Http\UploadedFile($imagePath, basename($imagePath)));
+                            }
+                        }
+                        // Llamar a publishToSocial
+                        $postikController = app(\App\Http\Controllers\PostikController::class);
+                        $result = $postikController->publishToSocial($publishRequest);
+                        $publishResults[] = [
+                            'integration_id' => $integrationId,
+                            'success' => isset($result->original['error']) ? !$result->original['error'] : false,
+                            'message' => $result->original['message'] ?? '',
+                        ];
+                    }
+                }
+            }
+            // Adjuntar resultados al response
+            $response['publish_results'] = $publishResults;
         } catch (Exception $e) {
             $response = [
                 'error' => true,

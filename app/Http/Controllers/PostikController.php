@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 
 class PostikController extends Controller
+    // ...existing code...
 {
     /**
      * Muestra la vista para seleccionar integraciones de Postik.
@@ -105,22 +106,80 @@ class PostikController extends Controller
     {
         $request->validate([
             'message' => 'required|string',
-            'platform' => 'required|string', // Ej: facebook, twitter, etc
+            'integration_id' => 'required|string',
+            'type' => 'required|string', // draft|schedule|now
+            'date' => 'nullable|string', // ISO date
+            'group' => 'nullable|string',
+            'settings' => 'nullable|array',
+            'file' => 'nullable|file',
         ]);
-    $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
-    $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+
+        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
         if (!$apiKey || !$endpoint) {
             return response()->json(['error' => true, 'message' => 'API Key o Endpoint de Postik no configurados.'], 400);
         }
-        $url = rtrim($endpoint, '/') . 'api/public/v1/posts';
+
+        $imageData = null;
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $uploadResult = $this->postikUploadFile($file, $apiKey, $endpoint);
+            if (isset($uploadResult['error']) && $uploadResult['error']) {
+                return response()->json($uploadResult, $uploadResult['status'] ?? 400);
+            }
+            $imageData = $uploadResult;
+        }
+
+
+        // Fecha en formato ISO 8601 con milisegundos y Z, zona America/Hermosillo si no se envía
+        $dateInput = $request->input('date');
+        if (empty($dateInput)) {
+            $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+        } else {
+            try {
+                $date = \Carbon\Carbon::parse($dateInput)->setTimezone('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+            } catch (\Exception $e) {
+                $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+            }
+        }
+
+        $url = rtrim($endpoint, '/') . '/api/public/v1/posts';
+        $postData = [
+            'integration' => [
+                'id' => $request->input('integration_id'),
+            ],
+            'value' => [
+                [
+                    'content' => $request->input('message'),
+                    // 'id' => '', // Solo si se edita un post existente
+                    'image' => $imageData ? [[
+                        'id' => $imageData['id'] ?? '',
+                        'path' => $imageData['path'] ?? '',
+                    ]] : [],
+                ]
+            ],
+        ];
+        $group = $request->input('group');
+        if ($group) {
+            $postData['group'] = $group;
+        }
+        $settings = $request->input('settings', []);
+        if (!empty($settings)) {
+            $postData['settings'] = $settings;
+        }
+
+        $payload = [
+            'type' => $request->input('type', 'now'),
+            'date' => $date,
+            'posts' => [ $postData ]
+        ];
+
         $response = Http::withHeaders([
             'Authorization' =>  $apiKey,
             'Accept' => 'application/json',
-        ])->post($url, [
-            'message' => $request->message,
-            'platform' => $request->platform,
-            // Puedes agregar más campos según la documentación de Postik
-        ]);
+            'Content-Type' => 'application/json',
+        ])->post($url, $payload);
+
         if ($response->successful()) {
             return response()->json(['error' => false, 'message' => 'Publicado correctamente', 'data' => $response->json()]);
         } else {
@@ -259,4 +318,61 @@ class PostikController extends Controller
         \Log::info('Postik saveIntegrations - Guardado final', ['active' => $validIntegrations]);
         return response()->json(['success' => true, 'message' => 'Integraciones activas actualizadas.', 'active' => $validIntegrations]);
     }
-}
+    // Sube un archivo a la API de Postik
+    public function uploadFileToPostik(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file',
+        ]);
+        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+        if (!$apiKey || !$endpoint) {
+            return response()->json(['error' => true, 'message' => 'API Key o Endpoint de Postik no configurados.'], 400);
+        }
+        $result = $this->postikUploadFile($request->file('file'), $apiKey, $endpoint);
+        if (isset($result['error']) && $result['error']) {
+            return response()->json($result, $result['status'] ?? 400);
+        }
+        return response()->json($result, 200);
+
+    }
+
+    /**
+     * Sube un archivo a la API de Postik (uso interno)
+     * @param \Illuminate\Http\UploadedFile $file
+     * @param string $apiKey
+     * @param string $endpoint
+     * @return array
+     */
+    private function postikUploadFile($file, $apiKey, $endpoint)
+    {
+        $url = rtrim($endpoint, '/') . '/api/public/v1/upload';
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => $apiKey,
+                'Accept' => 'application/json',
+            ])->attach(
+                'file',
+                file_get_contents($file->getRealPath()),
+                $file->getClientOriginalName()
+            )->post($url);
+            if ($response->successful()) {
+                return $response->json();
+            } else {
+                return [
+                    'error' => true,
+                    'message' => 'Error al subir archivo',
+                    'details' => $response->body(),
+                    'status' => $response->status(),
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => 'Excepción al subir archivo',
+                'details' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+    }
