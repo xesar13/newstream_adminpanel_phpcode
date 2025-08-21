@@ -186,7 +186,8 @@
                 @endcanany
                 @endcanany
 
-                @canany(['location-list', 'location-create', 'location-edit', 'location-delete', 'page-list', 'page-create', 'page-edit', 'page-delete'])
+
+                @canany(['location-list', 'location-create', 'location-edit', 'location-delete', 'page-list', 'page-create', 'page-edit', 'page-delete', 'postik-settings'])
                 <div class="sidebar-new-title">
                     {{ __('others') }}
                 </div>
@@ -209,6 +210,14 @@
                     </a>
                 </li>
                 @endcanany
+                @if(auth()->user()?->can('postik-settings') || (auth()->user() && (auth()->user()->hasRole('admin') || auth()->user()->id == 1)))
+                <li class="nav-item">
+                    <a href="{{ url('postik-integrations') }}" class="nav-link {{ $currentUrl == url('postik-integrations') ? 'active' : '' }}">
+                        <i class="nav-icon fas fa-share-alt"></i>
+                        <p>Configurar Postik</p>
+                    </a>
+                </li>
+                @endif
                 @endcanany
 
                 @canany(['role-list', 'role-create', 'role-edit', 'role-view', 'role-delete', 'staff-list', 'staff-create', 'staff-edit', 'staff-change-password','staff-delete'])

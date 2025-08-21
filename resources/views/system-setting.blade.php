@@ -158,6 +158,26 @@
                 </div>
                 @endcan
                 
+
+                @can('postik-integrations')
+                <div class="col-lg-3 col-md-4 col-sm-12 mb-3">
+                    <a href="{{ url('postik-integrations') }}" class="card setting_active_tab" style="text-decoration: none;">
+                        <div class="content d-flex h-100">
+                            <div class="row mx-2 ">
+                                <div class="provider_a test">
+                                    <i class="fas fa-share-alt icon_font_size"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="title"> {{ __('postik_integrations') }}</h5>
+                            <div class="title">{{ __('go_to_settings') }} <i class="fas fa-arrow-right mt-2 arrow_icon"></i>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                @endcan
+
                 @can('firebase-configuration')
                 <div class="col-lg-3 col-md-4 col-sm-12 mb-3">
                     <a href="{{ url('firebase-configuration') }}" class="card setting_active_tab" style="text-decoration: none;">

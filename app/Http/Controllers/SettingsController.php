@@ -54,6 +54,7 @@ class SettingsController extends Controller
             'social-media-create',
             'social-media-edit',
             'social-media-delete',
+            'postik-integrations',
             'system-update',]);
         return view('system-setting');
     }
@@ -509,4 +510,6 @@ class SettingsController extends Controller
 
         return redirect('firebase-configuration')->with('success', __('updated_success'));
     }
+
+   
 }

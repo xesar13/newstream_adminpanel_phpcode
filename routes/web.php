@@ -37,6 +37,7 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\UpdaterController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\PostikController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 
@@ -220,6 +221,7 @@ Route::group(['middleware' => ['auth:admin', 'checkLogin']], function () {
             Route::post('firebase-configuration', 'storeFirebaseSetting')->name('firebase-configuration.store');
         });
 
+
         Route::resource('seo-setting', SEOController::class, ['except' => ['create', 'edit']]);
         Route::get('seo-setting-list', [SEOController::class, 'show'])->name('seoSettingList');
 
@@ -235,6 +237,14 @@ Route::group(['middleware' => ['auth:admin', 'checkLogin']], function () {
         Route::resource('social-media', SocialMediaController::class, ['except' => ['create', 'edit']]);
         Route::get('social_media_list', [SocialMediaController::class, 'show'])->name('socialMediaList');
         Route::post('update_social_media_order', [SocialMediaController::class, 'update_order'])->name('update_social_media_order');
+
+        // Integraciones de Postik
+          Route::get('postik-configuration', [PostikController::class, 'showConfiguration'])->name('postik.configuration');
+            Route::post('postik-configuration', [PostikController::class, 'saveConfiguration'])->name('postik.configuration.save');
+            Route::post('postik-publish', [PostikController::class, 'publishToSocial'])->name('postik.publish');            
+            Route::get('postik-integrations-list', [PostikController::class, 'integrationsList'])->name('postik.integrations.list');
+            Route::get('postik-integrations', [PostikController::class, 'showIntegrations'])->name('postik.integrations');
+            Route::post('postik-integrations', [PostikController::class, 'saveIntegrations'])->name('postik.integrations.save');
 
         // Staff Management Routes
         Route::resource('staff', StaffController::class);

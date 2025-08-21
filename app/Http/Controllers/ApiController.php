@@ -3462,4 +3462,35 @@ class ApiController extends Controller
         // Make sure it's not empty
         return empty($slug) ? 'video-' . time() : $slug;
     }
+
+        /**
+     * Devuelve las integraciones activas de Postik (para frontend client)
+     * Endpoint: /api/postik/active-integrations
+     */
+    public function getActivePostikIntegrations(Request $request)
+    {
+        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+        $active = DB::table('tbl_settings')->where('type', 'postik_integrations_active')->value('message');
+        $activeIds = $active ? json_decode($active, true) : [];
+        $integrations = [];
+        if ($apiKey && $endpoint && !empty($activeIds)) {
+            $url = rtrim($endpoint, '/') . '/api/public/v1/integrations';
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'Authorization' => $apiKey,
+                'Accept' => 'application/json',
+            ])->get($url);
+            if ($response->successful()) {
+                $all = $response->json();
+                // Solo los activos
+                $integrations = array_values(array_filter($all, function($item) use ($activeIds) {
+                    return in_array($item['id'] ?? '', $activeIds);
+                }));
+            }
+        }
+        return response()->json([
+            'error' => false,
+            'data' => $integrations,
+        ]);
+    }
 }
