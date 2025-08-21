@@ -152,7 +152,16 @@ class PostikController extends Controller
         }
         // Obtener integraciones activas guardadas (en settings como JSON)
         $active = DB::table('tbl_settings')->where('type', 'postik_integrations_active')->value('message');
-        $activeIntegrations = $active ? json_decode($active, true) : [];
+        $activeIntegrationsArr = $active ? json_decode($active, true) : [];
+        // Extraer solo los IDs activos (soporta array de objetos o de strings)
+        $activeIds = [];
+        foreach ($activeIntegrationsArr as $item) {
+            if (is_array($item) && isset($item['id'])) {
+                $activeIds[] = $item['id'];
+            } elseif (is_string($item)) {
+                $activeIds[] = $item;
+            }
+        }
 
         // Bootstrap Table params
         $request = request();
@@ -192,7 +201,7 @@ class PostikController extends Controller
 
         // Marcar activos
         foreach ($rows as &$row) {
-            $row['active'] = in_array($row['id'] ?? '', $activeIntegrations);
+            $row['active'] = in_array($row['id'] ?? '', $activeIds);
         }
 
         return response()->json([
@@ -211,10 +220,10 @@ class PostikController extends Controller
 
         \Log::info('Postik saveIntegrations - IDs recibidos', ['ids' => $ids]);
 
-        // Validar que los IDs existan en la API de Postik
+        // Validar que los IDs existan en la API de Postik y obtener name/picture
         $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
         $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
-        $validIds = [];
+        $validIntegrations = [];
         if ($apiKey && $endpoint) {
             $url = rtrim($endpoint, '/') . '/api/public/v1/integrations';
             $response = Http::withHeaders([
@@ -223,23 +232,31 @@ class PostikController extends Controller
             ])->get($url);
             if ($response->successful()) {
                 $integrations = $response->json();
-                $allIds = array_column($integrations, 'id');
-                $validIds = array_values(array_intersect($ids, $allIds));
-                \Log::info('Postik saveIntegrations - IDs válidos', ['validIds' => $validIds, 'allIds' => $allIds]);
+                // Filtrar solo los seleccionados y mapear id, name, picture
+                foreach ($integrations as $item) {
+                    if (in_array($item['id'] ?? '', $ids)) {
+                        $validIntegrations[] = [
+                            'id' => $item['id'] ?? '',
+                            'name' => $item['name'] ?? '',
+                            'picture' => $item['picture'] ?? '',
+                        ];
+                    }
+                }
+                \Log::info('Postik saveIntegrations - Integraciones válidas', ['validIntegrations' => $validIntegrations]);
             } else {
                 \Log::warning('Postik saveIntegrations - No se pudo obtener integraciones de la API');
             }
         }
         // Si no hay conexión, no guardar nada
-        if (empty($validIds) && !empty($ids)) {
-            \Log::warning('Postik saveIntegrations - Ningún ID válido guardado');
+        if (empty($validIntegrations) && !empty($ids)) {
+            \Log::warning('Postik saveIntegrations - Ninguna integración válida guardada');
             return response()->json(['success' => false, 'message' => 'No se pudieron validar las integraciones seleccionadas.']);
         }
         DB::table('tbl_settings')->updateOrInsert(
             ['type' => 'postik_integrations_active'],
-            ['message' => json_encode($validIds)]
+            ['message' => json_encode($validIntegrations)]
         );
-        \Log::info('Postik saveIntegrations - Guardado final', ['active' => $validIds]);
-        return response()->json(['success' => true, 'message' => 'Integraciones activas actualizadas.', 'active' => $validIds]);
+        \Log::info('Postik saveIntegrations - Guardado final', ['active' => $validIntegrations]);
+        return response()->json(['success' => true, 'message' => 'Integraciones activas actualizadas.', 'active' => $validIntegrations]);
     }
 }

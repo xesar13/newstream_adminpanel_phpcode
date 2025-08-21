@@ -3467,30 +3467,31 @@ class ApiController extends Controller
      * Devuelve las integraciones activas de Postik (para frontend client)
      * Endpoint: /api/postik/active-integrations
      */
-    public function getActivePostikIntegrations(Request $request)
+ public function getActivePostikIntegrations(Request $request)
     {
-        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
-        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+        // Devuelve el array de integraciones activas (id, name, picture) almacenadas en postik_integrations_active
         $active = DB::table('tbl_settings')->where('type', 'postik_integrations_active')->value('message');
-        $activeIds = $active ? json_decode($active, true) : [];
-        $integrations = [];
-        if ($apiKey && $endpoint && !empty($activeIds)) {
-            $url = rtrim($endpoint, '/') . '/api/public/v1/integrations';
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => $apiKey,
-                'Accept' => 'application/json',
-            ])->get($url);
-            if ($response->successful()) {
-                $all = $response->json();
-                // Solo los activos
-                $integrations = array_values(array_filter($all, function($item) use ($activeIds) {
-                    return in_array($item['id'] ?? '', $activeIds);
-                }));
+        $activeIntegrations = $active ? json_decode($active, true) : [];
+        // Si el array es de solo ids (por compatibilidad), convertir a objetos
+        $result = [];
+        foreach ($activeIntegrations as $item) {
+            if (is_array($item) && isset($item['id'])) {
+                $result[] = [
+                    'id' => $item['id'],
+                    'name' => $item['name'] ?? '',
+                    'picture' => $item['picture'] ?? '',
+                ];
+            } elseif (is_string($item)) {
+                $result[] = [
+                    'id' => $item,
+                    'name' => '',
+                    'picture' => '',
+                ];
             }
         }
         return response()->json([
             'error' => false,
-            'data' => $integrations,
+            'integrations' => $result,
         ]);
     }
 }
