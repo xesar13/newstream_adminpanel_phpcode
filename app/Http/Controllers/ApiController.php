@@ -639,7 +639,14 @@ class ApiController extends Controller
                         // Si no hay ofile, intentar con la imagen principal
                         $imagePath = public_path($news->image);
                         if (file_exists($imagePath)) {
-                            $publishRequest->files->set('file', new \Illuminate\Http\UploadedFile($imagePath, basename($imagePath)));
+                            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                                $imagePath,
+                                basename($imagePath),
+                                mime_content_type($imagePath),
+                                null,
+                                true // test mode
+                            );
+                            $publishRequest->files->set('file', $uploadedFile);
                         }
                     }
                     // Llamar a publishSocialToWebhook (nuevo método)
