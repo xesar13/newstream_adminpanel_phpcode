@@ -64,6 +64,7 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('get_user_notification', [ApiController::class, 'getUserNotification']); // pagintion pending
     Route::post('set_user_category', [ApiController::class, 'setUserCategory']);
     Route::post('get_postik_integrations', [ApiController::class, 'getActivePostikIntegrations']);// Integraciones activas de Postik
+    Route::post('postik_upload', [ApiController::class, 'apiUploadFileToPostik']);
     Route::post('register_token', [ApiController::class, 'registerToken']);
     Route::post('delete_user', [ApiController::class, 'deleteUser']);
     Route::post('update_profile', [ApiController::class, 'updateProfile']);

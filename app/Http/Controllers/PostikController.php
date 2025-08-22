@@ -106,7 +106,7 @@ class PostikController extends Controller
     {
         $request->validate([
             'message' => 'required|string',
-            'integration_id' => 'required|string',
+            'integration_ids' => 'required', // Puede ser string JSON o array
             'type' => 'required|string', // draft|schedule|now
             'date' => 'nullable|string', // ISO date
             'group' => 'nullable|string',
@@ -130,68 +130,91 @@ class PostikController extends Controller
             $imageData = $uploadResult;
         }
 
+        // Procesar integration_ids
+        $integrationIds = [];
+        $idsInput = $request->input('integration_ids');
+        if (is_string($idsInput)) {
+            $decoded = json_decode($idsInput, true);
+            if (is_array($decoded)) {
+                $integrationIds = $decoded;
+            }
+        } elseif (is_array($idsInput)) {
+            $integrationIds = $idsInput;
+        }
 
         // Fecha en formato ISO 8601 con milisegundos y Z, zona America/Hermosillo si no se envía
         $dateInput = $request->input('date');
         if (empty($dateInput)) {
-            $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+            $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\\TH:i:s.v\\Z');
         } else {
             try {
-                $date = \Carbon\Carbon::parse($dateInput)->setTimezone('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+                $date = \Carbon\Carbon::parse($dateInput)->setTimezone('America/Hermosillo')->format('Y-m-d\\TH:i:s.v\\Z');
             } catch (\Exception $e) {
-                $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\TH:i:s.v\Z');
+                $date = \Carbon\Carbon::now('America/Hermosillo')->format('Y-m-d\\TH:i:s.v\\Z');
             }
         }
 
-        $url = rtrim($endpoint, '/') . '/api/public/v1/posts';
-        $postData = [
-            'integration' => [
-                'id' => $request->input('integration_id'),
-            ],
-            'value' => [
-                [
-                    'content' => $request->input('message'),
-                    // 'id' => '', // Solo si se edita un post existente
-                    'image' => $imageData ? [[
-                        'id' => $imageData['id'] ?? '',
-                        'path' => $imageData['path'] ?? '',
-                    ]] : [],
-                ]
-            ],
-        ];
-        $group = $request->input('group');
-        if ($group) {
-            $postData['group'] = $group;
-        }
-        $settings = $request->input('settings', []);
-        if (!empty($settings)) {
-            $postData['settings'] = $settings;
-        }
+        $results = [];
+        foreach ($integrationIds as $integrationId) {
+            $url = rtrim($endpoint, '/') . '/api/public/v1/posts';
+            $postData = [
+                'integration' => [
+                    'id' => $integrationId,
+                ],
+                'value' => [
+                    [
+                        'content' => $request->input('message'),
+                        'image' => $imageData ? [[
+                            'id' => $imageData['id'] ?? '',
+                            'path' => $imageData['path'] ?? '',
+                        ]] : [],
+                    ]
+                ],
+            ];
+            $group = $request->input('group');
+            if ($group) {
+                $postData['group'] = $group;
+            }
+            $settings = $request->input('settings', []);
+            if (!empty($settings)) {
+                $postData['settings'] = $settings;
+            }
 
-        $payload = [
-            'type' => $request->input('type', 'now'),
-            'date' => $date,
-            'posts' => [ $postData ]
-        ];
+            $payload = [
+                'type' => $request->input('type', 'now'),
+                'date' => $date,
+                'posts' => [ $postData ]
+            ];
 
-        $response = Http::withHeaders([
-            'Authorization' =>  $apiKey,
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+            $response = Http::withHeaders([
+                'Authorization' =>  $apiKey,
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ])->post($url, $payload);
 
-        if ($response->successful()) {
-            return response()->json(['error' => false, 'message' => 'Publicado correctamente', 'data' => $response->json()]);
-        } else {
-            // Loguear error en la raíz
-            $logPath = base_path('postik_publish_errors.log');
-            $logEntry = '[' . date('Y-m-d H:i:s') . "]\n" .
-                'Integración: ' . ($request->input('integration_id') ?? '-') . "\n" .
-                'Error: ' . $response->body() . "\n" .
-                'Payload: ' . json_encode($payload) . "\n--------------------------\n";
-            file_put_contents($logPath, $logEntry, FILE_APPEND);
-            return response()->json(['error' => true, 'message' => 'Error al publicar: ' . $response->body()], $response->status());
+            if ($response->successful()) {
+                $results[] = [
+                    'integration_id' => $integrationId,
+                    'success' => true,
+                    'message' => 'Publicado correctamente',
+                    'data' => $response->json(),
+                ];
+            } else {
+                // Loguear error en la raíz
+                $logPath = base_path('postik_publish_errors.log');
+                $logEntry = '[' . date('Y-m-d H:i:s') . "]\n" .
+                    'Integración: ' . ($integrationId ?? '-') . "\n" .
+                    'Error: ' . $response->body() . "\n" .
+                    'Payload: ' . json_encode($payload) . "\n--------------------------\n";
+                file_put_contents($logPath, $logEntry, FILE_APPEND);
+                $results[] = [
+                    'integration_id' => $integrationId,
+                    'success' => false,
+                    'message' => 'Error al publicar: ' . $response->body(),
+                ];
+            }
         }
+        return response()->json(['error' => false, 'results' => $results]);
     }
 
     // Obtiene el listado de integraciones desde la API de Postik y muestra la selección de activas
@@ -325,24 +348,7 @@ class PostikController extends Controller
         \Log::info('Postik saveIntegrations - Guardado final', ['active' => $validIntegrations]);
         return response()->json(['success' => true, 'message' => 'Integraciones activas actualizadas.', 'active' => $validIntegrations]);
     }
-    // Sube un archivo a la API de Postik
-    public function uploadFileToPostik(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|file',
-        ]);
-        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
-        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
-        if (!$apiKey || !$endpoint) {
-            return response()->json(['error' => true, 'message' => 'API Key o Endpoint de Postik no configurados.'], 400);
-        }
-        $result = $this->postikUploadFile($request->file('file'), $apiKey, $endpoint);
-        if (isset($result['error']) && $result['error']) {
-            return response()->json($result, $result['status'] ?? 400);
-        }
-        return response()->json($result, 200);
-
-    }
+  
 
     /**
      * Sube un archivo a la API de Postik (uso interno)
@@ -351,7 +357,7 @@ class PostikController extends Controller
      * @param string $endpoint
      * @return array
      */
-    private function postikUploadFile($file, $apiKey, $endpoint)
+    public function postikUploadFile($file, $apiKey, $endpoint)
     {
         $url = rtrim($endpoint, '/') . '/api/public/v1/upload';
         try {
@@ -381,5 +387,130 @@ class PostikController extends Controller
                 'status' => 500,
             ];
         }
+    }
+
+    /**
+     * Envía contenido a un webhook externo para cada integración.
+     * Endpoint fijo, payload similar al recibido.
+     * Ejemplo de request:
+     * {
+     *   "content": "Ultima Noticia",
+     *   "images": [{"id":"","url":""}],
+     *   "integrates_ids": ["1729172912","1892717291"]
+     * }
+     */
+    public function sendToWebhook(Request $request)
+    {
+        $request->validate([
+            'content' => 'required|string',
+            'images' => 'nullable|array',
+            'integrates_ids' => 'required|array',
+        ]);
+
+        $webhookUrl = 'https://n8n-v2.qnzwva.easypanel.host/webhook/send_post'; // Cambia aquí tu endpoint fijo
+        $content = $request->input('content');
+        $images = $request->input('images', []);
+        $integratesIds = $request->input('integrates_ids', []);
+
+        $results = [];
+        foreach ($integratesIds as $integrationId) {
+            $payload = [
+                'content' => $content,
+                'images' => $images,
+                'integration_id' => $integrationId,
+            ];
+            try {
+                $response = Http::withHeaders([
+                    'Accept' => 'application/json',
+                ])->post($webhookUrl, $payload);
+                if ($response->successful()) {
+                    $results[] = [
+                        'integration_id' => $integrationId,
+                        'success' => true,
+                        'message' => 'Enviado correctamente',
+                        'data' => $response->json(),
+                    ];
+                } else {
+                    $results[] = [
+                        'integration_id' => $integrationId,
+                        'success' => false,
+                        'message' => 'Error al enviar: ' . $response->body(),
+                    ];
+                }
+            } catch (\Exception $e) {
+                $results[] = [
+                    'integration_id' => $integrationId,
+                    'success' => false,
+                    'message' => 'Excepción: ' . $e->getMessage(),
+                ];
+            }
+        }
+        return response()->json(['error' => false, 'results' => $results]);
+    }
+
+        /**
+     * Envía contenido a un webhook externo para cada integración, subiendo primero un archivo.
+     * Request: content (string), integrates_ids (array), file (opcional)
+     * Sube el archivo, luego envía la url/id en images a cada integración.
+     */
+    public function publishSocialToWebhook(Request $request)
+    {
+        $request->validate([
+            'content' => 'required|string',
+            'integrates_ids' => 'required|array',
+            'file' => 'nullable|file',
+        ]);
+
+        $webhookUrl = 'https://n8n-v2.qnzwva.easypanel.host/webhook/send_post'; // Cambia aquí tu endpoint fijo
+        $content = $request->input('content');
+        $integratesIds = $request->input('integrates_ids', []);
+
+        // Subir archivo si existe
+        $images = [];
+        if ($request->hasFile('file')) {
+            $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+            $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+            if ($apiKey && $endpoint) {
+                $uploadResult = $this->postikUploadFile($request->file('file'), $apiKey, $endpoint);
+                if (isset($uploadResult['error']) && $uploadResult['error']) {
+                    return response()->json($uploadResult, $uploadResult['status'] ?? 400);
+                }
+                // Solo agregar si id y path/url existen y son string no vacíos
+                $id = isset($uploadResult['id']) && is_string($uploadResult['id']) && $uploadResult['id'] !== '' ? $uploadResult['id'] : null;
+                $url = isset($uploadResult['path']) && is_string($uploadResult['path']) && $uploadResult['path'] !== ''
+                    ? $uploadResult['path']
+                    : (isset($uploadResult['url']) && is_string($uploadResult['url']) && $uploadResult['url'] !== '' ? $uploadResult['url'] : null);
+                if ($id && $url) {
+                    $images[] = [
+                        'id' => $id,
+                        'url' => $url,
+                    ];
+                }
+            }
+        }
+
+        // Enviar el payload completo con integrates_ids como array, solo una vez
+        $payload = [
+            'content' => $content,
+            'images' => $images,
+            'integrates_ids' => $integratesIds,
+        ];
+        try {
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+            ])->post($webhookUrl, $payload);
+            $result = [
+                'success' => $response->successful(),
+                'message' => $response->successful() ? 'Postik: Enviado correctamente' : ('Postik: Error al enviar: ' . $response->body()),
+                'data' => $response->json() ?? $response->body(),
+            ];
+        } catch (\Exception $e) {
+            $result = [
+                'success' => false,
+                'message' => 'Postik: Excepción: ' . $e->getMessage(),
+                'data' => null,
+            ];
+        }
+        return response()->json(['error' => false, 'results' => [$result]]);
     }
     }

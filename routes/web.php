@@ -245,6 +245,9 @@ Route::group(['middleware' => ['auth:admin', 'checkLogin']], function () {
             Route::get('postik-integrations-list', [PostikController::class, 'integrationsList'])->name('postik.integrations.list');
             Route::get('postik-integrations', [PostikController::class, 'showIntegrations'])->name('postik.integrations');
             Route::post('postik-integrations', [PostikController::class, 'saveIntegrations'])->name('postik.integrations.save');
+            // Webhook externo para integraciones (segunda opción de publicación)
+            Route::post('postik-send-webhook', [PostikController::class, 'publishSocialToWebhook'])->name('postik.socialtowebhook');
+
 
         // Staff Management Routes
         Route::resource('staff', StaffController::class);

@@ -583,7 +583,7 @@ class ApiController extends Controller
                 'title' => ['required'],
                 'slug' => ['required'],
                 'published_date' => ['required'],
-                'integration_ids' => ['nullable', 'array'], // IDs de integraciones a publicar
+                'integration_ids' => ['nullable', 'string'], // Ahora espera un string JSON
             ]);
             if ($validator->fails()) {
                 return response()->json([
@@ -604,9 +604,17 @@ class ApiController extends Controller
                 ];
             }
 
-            // Si la noticia fue creada/actualizada correctamente y hay integraciones
+            // Procesar integration_ids como string JSON
             $publishResults = [];
-            if (isset($response['error']) && !$response['error'] && is_array($request->integration_ids) && count($request->integration_ids) > 0) {
+            $integrationIds = [];
+            if (!empty($request->integration_ids)) {
+                $decoded = json_decode($request->integration_ids, true);
+                if (is_array($decoded)) {
+                    $integrationIds = $decoded;
+                }
+            }
+
+            if (isset($response['error']) && !$response['error'] && count($integrationIds) > 0) {
                 // Obtener la noticia recién creada/actualizada
                 $news = null;
                 if ($request->action_type == '2') {
@@ -615,32 +623,29 @@ class ApiController extends Controller
                     $news = \App\Models\News::where('slug', $request->slug)->latest('id')->first();
                 }
                 if ($news) {
-                    foreach ($request->integration_ids as $integrationId) {
-                        // Preparar datos para publishToSocial
-                        $publishRequest = new \Illuminate\Http\Request();
-                        $publishRequest->replace([
-                            'message' => $news->title . (isset($news->description) ? ("\n" . strip_tags($news->description)) : ''),
-                            'integration_id' => $integrationId,
-                            'type' => 'now',
-                            'date' => $news->published_date ?? null,
-                            // 'file' => null, // Si quieres enviar imagen, deberías obtener la ruta y cargar el archivo
-                        ]);
-                        // Si la noticia tiene imagen, intentar adjuntarla
-                        if ($news->image) {
-                            $imagePath = public_path($news->image);
-                            if (file_exists($imagePath)) {
-                                $publishRequest->files->set('file', new \Illuminate\Http\UploadedFile($imagePath, basename($imagePath)));
-                            }
+                    // Preparar datos para publishSocialToWebhook
+                    $publishRequest = new \Illuminate\Http\Request();
+                    $publishRequest->replace([
+                        'content' => $news->title . (isset($news->description) ? ("\n" . strip_tags($news->description)) : ''),
+                        'integrates_ids' => $integrationIds
+                    ]);
+                    // Si hay archivo en ofile, adjuntar el primero
+                    if ($request->file('ofile')) {
+                        $files = $request->file('ofile');
+                        if (is_array($files) && count($files) > 0) {
+                            $publishRequest->files->set('file', $files[0]);
                         }
-                        // Llamar a publishToSocial
-                        $postikController = app(\App\Http\Controllers\PostikController::class);
-                        $result = $postikController->publishToSocial($publishRequest);
-                        $publishResults[] = [
-                            'integration_id' => $integrationId,
-                            'success' => isset($result->original['error']) ? !$result->original['error'] : false,
-                            'message' => $result->original['message'] ?? '',
-                        ];
+                    } else if ($news->image) {
+                        // Si no hay ofile, intentar con la imagen principal
+                        $imagePath = public_path($news->image);
+                        if (file_exists($imagePath)) {
+                            $publishRequest->files->set('file', new \Illuminate\Http\UploadedFile($imagePath, basename($imagePath)));
+                        }
                     }
+                    // Llamar a publishSocialToWebhook (nuevo método)
+                    $postikController = app(PostikController::class);
+                    $result = $postikController->publishSocialToWebhook($publishRequest);
+                    $publishResults = $result->original['results'] ?? [];
                 }
             }
             // Adjuntar resultados al response
@@ -648,7 +653,7 @@ class ApiController extends Controller
         } catch (Exception $e) {
             $response = [
                 'error' => true,
-                'message' => $e->getMessage(),
+                'message' => 'Postik: ' . $e->getMessage(),
             ];
         }
         return response()->json($response);
@@ -3536,5 +3541,26 @@ class ApiController extends Controller
             'error' => false,
             'integrations' => $result,
         ]);
+    }
+
+      // Sube un archivo a la API de Postik
+    public function apiUploadFileToPostik(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file',
+        ]);
+        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+        if (!$apiKey || !$endpoint) {
+            return response()->json(['error' => true, 'message' => 'API Key o Endpoint de Postik no configurados.'], 400);
+        }
+           // Llamar a publishSocialToWebhook (nuevo método)
+        $postikController = app(PostikController::class);
+        $result = $postikController->postikUploadFile($request->file('file'), $apiKey, $endpoint);
+        if (isset($result['error']) && $result['error']) {
+            return response()->json($result, $result['status'] ?? 400);
+        }
+        return response()->json($result, 200);
+
     }
 }
