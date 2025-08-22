@@ -183,6 +183,13 @@ class PostikController extends Controller
         if ($response->successful()) {
             return response()->json(['error' => false, 'message' => 'Publicado correctamente', 'data' => $response->json()]);
         } else {
+            // Loguear error en la raíz
+            $logPath = base_path('postik_publish_errors.log');
+            $logEntry = '[' . date('Y-m-d H:i:s') . "]\n" .
+                'Integración: ' . ($request->input('integration_id') ?? '-') . "\n" .
+                'Error: ' . $response->body() . "\n" .
+                'Payload: ' . json_encode($payload) . "\n--------------------------\n";
+            file_put_contents($logPath, $logEntry, FILE_APPEND);
             return response()->json(['error' => true, 'message' => 'Error al publicar: ' . $response->body()], $response->status());
         }
     }
