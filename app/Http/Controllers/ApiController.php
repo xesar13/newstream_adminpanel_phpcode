@@ -623,32 +623,16 @@ class ApiController extends Controller
                     $news = \App\Models\News::where('slug', $request->slug)->latest('id')->first();
                 }
                 if ($news) {
-                    // Preparar datos para publishSocialToWebhook
                     $publishRequest = new \Illuminate\Http\Request();
                     $publishRequest->replace([
                         'content' => $news->title . (isset($news->description) ? ("\n" . strip_tags($news->description)) : ''),
                         'integrates_ids' => $integrationIds
                     ]);
                     // Si hay archivo en ofile, adjuntar el primero
-                    if ($request->file('ofile')) {
-                        $files = $request->file('ofile');
-                        if (is_array($files) && count($files) > 0) {
-                            $publishRequest->files->set('file', $files[0]);
-                        }
-                    } else if ($news->image) {
-                        // Si no hay ofile, intentar con la imagen principal
-                        $imagePath = public_path($news->image);
-                        if (file_exists($imagePath)) {
-                            $uploadedFile = new \Illuminate\Http\UploadedFile(
-                                $imagePath,
-                                basename($imagePath),
-                                mime_content_type($imagePath),
-                                null,
-                                true // test mode
-                            );
-                            $publishRequest->files->set('file', $uploadedFile);
-                        }
+                    if ($request->hasFile('image')) {
+                        $publishRequest->files->set('file', $request->file('image'));
                     }
+
                     // Llamar a publishSocialToWebhook (nuevo método)
                     $postikController = app(PostikController::class);
                     $result = $postikController->publishSocialToWebhook($publishRequest);

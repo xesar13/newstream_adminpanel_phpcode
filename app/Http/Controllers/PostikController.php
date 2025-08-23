@@ -55,6 +55,7 @@ class PostikController extends Controller
     {
     $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
     $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
+    $webhook_publish_endpoint_url = DB::table('tbl_settings')->where('type', 'webhook_publish_endpoint_url')->value('message');
         // Obtener integraciones desde la API de Postik
         $integrations = [];
         if ($apiKey && $endpoint) {
@@ -77,6 +78,7 @@ class PostikController extends Controller
         return view('postik-configuration', [
             'apiKey' => $apiKey,
             'endpoint' => $endpoint,
+            'webhook_publish_endpoint_url' => $webhook_publish_endpoint_url,
             'integrations' => $integrations,
             'activeIntegrations' => $activeIntegrations,
         ]);
@@ -88,6 +90,7 @@ class PostikController extends Controller
         $request->validate([
             'api_key' => 'required|string',
             'endpoint_url' => 'required|url',
+            'webhook_publish_endpoint_url' => 'required|url',
         ]);
         DB::table('tbl_settings')->updateOrInsert(
             ['type' => 'postik_api_key'],
@@ -96,6 +99,10 @@ class PostikController extends Controller
         DB::table('tbl_settings')->updateOrInsert(
             ['type' => 'postik_endpoint_url'],
             ['message' => $request->endpoint_url]
+        );
+        DB::table('tbl_settings')->updateOrInsert(
+            ['type' => 'webhook_publish_endpoint_url'],
+            ['message' => $request->webhook_publish_endpoint_url]
         );
         Session::flash('success', 'Configuración de Postik guardada correctamente.');
        return response()->json(['success' => true, 'message' => 'Configuracion actualizada.']);
@@ -389,65 +396,6 @@ class PostikController extends Controller
         }
     }
 
-    /**
-     * Envía contenido a un webhook externo para cada integración.
-     * Endpoint fijo, payload similar al recibido.
-     * Ejemplo de request:
-     * {
-     *   "content": "Ultima Noticia",
-     *   "images": [{"id":"","url":""}],
-     *   "integrates_ids": ["1729172912","1892717291"]
-     * }
-     */
-    public function sendToWebhook(Request $request)
-    {
-        $request->validate([
-            'content' => 'required|string',
-            'images' => 'nullable|array',
-            'integrates_ids' => 'required|array',
-        ]);
-
-        $webhookUrl = 'https://n8n-v2.qnzwva.easypanel.host/webhook/send_post'; // Cambia aquí tu endpoint fijo
-        $content = $request->input('content');
-        $images = $request->input('images', []);
-        $integratesIds = $request->input('integrates_ids', []);
-
-        $results = [];
-        foreach ($integratesIds as $integrationId) {
-            $payload = [
-                'content' => $content,
-                'images' => $images,
-                'integration_id' => $integrationId,
-            ];
-            try {
-                $response = Http::withHeaders([
-                    'Accept' => 'application/json',
-                ])->post($webhookUrl, $payload);
-                if ($response->successful()) {
-                    $results[] = [
-                        'integration_id' => $integrationId,
-                        'success' => true,
-                        'message' => 'Enviado correctamente',
-                        'data' => $response->json(),
-                    ];
-                } else {
-                    $results[] = [
-                        'integration_id' => $integrationId,
-                        'success' => false,
-                        'message' => 'Error al enviar: ' . $response->body(),
-                    ];
-                }
-            } catch (\Exception $e) {
-                $results[] = [
-                    'integration_id' => $integrationId,
-                    'success' => false,
-                    'message' => 'Excepción: ' . $e->getMessage(),
-                ];
-            }
-        }
-        return response()->json(['error' => false, 'results' => $results]);
-    }
-
         /**
      * Envía contenido a un webhook externo para cada integración, subiendo primero un archivo.
      * Request: content (string), integrates_ids (array), file (opcional)
@@ -457,39 +405,28 @@ class PostikController extends Controller
     {
         $request->validate([
             'content' => 'required|string',
-            'integrates_ids' => 'required|array',
-            'file' => 'nullable|file',
+            'integrates_ids' => 'required|array'
         ]);
 
-        $webhookUrl = 'https://n8n-v2.qnzwva.easypanel.host/webhook/send_post'; // Cambia aquí tu endpoint fijo
+        $webhookUrl = DB::table('tbl_settings')->where('type', 'webhook_publish_endpoint_url')->value('message'); // Cambia aquí tu endpoint fijo
         $content = $request->input('content');
         $integratesIds = $request->input('integrates_ids', []);
 
-        // Subir archivo si existe
         $images = [];
-        if ($request->hasFile('file')) {
-            $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
-            $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
-            if ($apiKey && $endpoint) {
-                $uploadResult = $this->postikUploadFile($request->file('file'), $apiKey, $endpoint);
-                if (isset($uploadResult['error']) && $uploadResult['error']) {
-                    return response()->json($uploadResult, $uploadResult['status'] ?? 400);
-                }
-                // Solo agregar si id y path/url existen y son string no vacíos
-                $id = isset($uploadResult['id']) && is_string($uploadResult['id']) && $uploadResult['id'] !== '' ? $uploadResult['id'] : null;
-                $url = isset($uploadResult['path']) && is_string($uploadResult['path']) && $uploadResult['path'] !== ''
-                    ? $uploadResult['path']
-                    : (isset($uploadResult['url']) && is_string($uploadResult['url']) && $uploadResult['url'] !== '' ? $uploadResult['url'] : null);
-                if ($id && $url) {
-                    $images[] = [
-                        'id' => $id,
-                        'url' => $url,
-                    ];
-                }
-            }
-        }
+        $apiKey = DB::table('tbl_settings')->where('type', 'postik_api_key')->value('message');
+        $endpoint = DB::table('tbl_settings')->where('type', 'postik_endpoint_url')->value('message');
 
-        // Enviar el payload completo con integrates_ids como array, solo una vez
+        // Solo tomar la primera imagen del array images (si existe)
+        if ($request->hasFile('file') && $apiKey && $endpoint) {
+                    $uploadResult = $this->postikUploadFile($request->file('file'), $apiKey, $endpoint);
+                    if (isset($uploadResult['id']) && isset($uploadResult['path'])) {
+                        $images[] = [
+                            'id' => $uploadResult['id'],
+                            'url' => $uploadResult['path'],
+                        ];
+                    }
+                }
+            
         $payload = [
             'content' => $content,
             'images' => $images,

@@ -43,6 +43,10 @@
                     <form id="create_form" action="{{ route('postik.configuration.save') }}" role="form" method="POST" enctype="multipart/form-data">
                         @csrf
                         <div class="form-group mb-3">
+                            <label for="webhook_publish_endpoint_url">__{{ __('webhook_publish_endpoint_url') }}</label>
+                            <input type="url" class="form-control" id="webhook_publish_endpoint_url" name="webhook_publish_endpoint_url" value="{{ old('webhook_publish_endpoint_url', $webhook_publish_endpoint_url ?? '') }}" required placeholder="https://url-api.com/webhook/send_post">
+                        </div>
+                        <div class="form-group mb-3">
                             <label for="endpoint_url">__{{ __('endpoint_url_postik') }}</label>
                             <input type="url" class="form-control" id="endpoint_url" name="endpoint_url" value="{{ old('endpoint_url', $endpoint) }}" required placeholder="https://admin-news.nextream.net">
                         </div>
